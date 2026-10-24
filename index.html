@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grab Driver Application | Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:18px;background:#f3f7f5;color:#193b2c;font-family:system-ui,-apple-system,sans-serif}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer;border:0;border-radius:9px;padding:11px 15px;font-weight:650}
+button:disabled{opacity:.5;cursor:wait}
+.primary{background:#00a859;color:#fff}
+.secondary{background:#e7eee9;color:#193b2c}
+main{max-width:1200px;margin:auto}
+.card{background:#fff;border-radius:16px;padding:22px;margin-bottom:18px;box-shadow:0 3px 15px #163d2910}
+h1{font-size:24px;margin:0 0 8px}
+h2{font-size:19px;margin:0 0 14px}
+.muted{color:#66766d;font-size:14px}
+label{display:block;font-size:14px;font-weight:650;margin:12px 0 6px}
+input,select,textarea{width:100%;padding:12px;border:1px solid #ccd8d0;border-radius:9px;background:white;color:#193b2c}
+textarea{min-height:90px;resize:vertical}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.stat{background:#f0f8f3;border-radius:12px;padding:15px}
+.stat strong{display:block;font-size:25px;margin-top:6px}
+.toolbar{display:grid;grid-template-columns:2fr 1fr auto;gap:10px;margin:15px 0}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:800px}
+th,td{text-align:left;padding:12px 10px;border-bottom:1px solid #e5ece7;font-size:14px;vertical-align:top}
+th{background:#f7faf8;white-space:nowrap}
+.badge{display:inline-block;border-radius:20px;padding:5px 9px;background:#edf1ee;font-size:12px;font-weight:700;white-space:nowrap}
+.badge.approved{background:#dff6e8;color:#08753d}
+.badge.pending{background:#fff1d1;color:#815900}
+.badge.rejected{background:#fde5e5;color:#a52626}
+.badge.progress{background:#e4efff;color:#245ba8}
+.actions{display:flex;gap:7px;flex-wrap:wrap}
+.hidden{display:none!important}
+.message{padding:12px;border-radius:9px;margin:12px 0;white-space:pre-wrap}
+.error{background:#fff0ef;color:#a52626}
+.success{background:#e6f7ec;color:#176b3b}
+.header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+#loading{padding:18px;text-align:center;color:#66766d}
+#login{max-width:450px;margin:8vh auto}
+#detail{border:1px solid #d9e5dd}
+footer{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:15px}
+.applicant-detail{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:18px 0}
+.detail-section{grid-column:1/-1;font-weight:750;font-size:16px;border-bottom:1px solid #e5ece7;padding-bottom:7px;margin-top:8px}
+.detail-item{padding:12px;background:#f5f9f6;border-radius:10px;overflow-wrap:anywhere;min-width:0}
+.detail-label{display:block;color:#66766d;font-size:13px;margin-bottom:5px}
+.detail-value{font-weight:600;overflow-wrap:anywhere;white-space:pre-wrap}
+.detail-value a{color:#087d48;text-decoration:underline}
+.detail-loading{padding:16px;background:#f5f9f6;border-radius:10px;color:#66766d;grid-column:1/-1;overflow-wrap:anywhere}
+@media(max-width:700px){
+ body{padding:10px}.card{padding:15px}
+ .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .toolbar{grid-template-columns:1fr}
+ .header{align-items:flex-start;flex-direction:column}
+ .applicant-detail{grid-template-columns:1fr}
+ .detail-section{grid-column:1}
+}
+</style>
+</head>
+<body>
+<main>
+<section id="login" class="card">
+<h1>Grab Driver Application</h1>
+<p class="muted">ระบบจัดการใบสมัครคนขับ Grab</p>
+<div id="loginMsg" class="message error hidden"></div>
+<form id="loginForm">
+<label for="email">อีเมลผู้ดูแล</label>
+<input id="email" type="email" autocomplete="username" value="tanabodin.ch@grabtaxi.com" required>
+<label for="password">รหัสผ่าน</label>
+<input id="password" type="password" autocomplete="current-password" required>
+<button id="loginBtn" class="primary" style="width:100%;margin-top:18px">เข้าสู่ระบบ</button>
+</form>
+</section>
+
+<section id="app" class="hidden">
+<div class="header">
+<div><h1>จัดการผู้สมัคร Grab</h1><div class="muted" id="whoami"></div></div>
+<button id="logoutBtn" class="secondary">ออกจากระบบ</button>
+</div>
+<div id="appMsg" class="message hidden"></div>
+
+<div class="grid card">
+<div class="stat"><span class="muted">รายการในหน้านี้</span><strong id="countAll">0</strong></div>
+<div class="stat"><span class="muted">รอตรวจสอบ</span><strong id="countPending">0</strong></div>
+<div class="stat"><span class="muted">กำลังดำเนินการ</span><strong id="countProgress">0</strong></div>
+<div class="stat"><span class="muted">อนุมัติแล้ว</span><strong id="countApproved">0</strong></div>
+</div>
+
+<div class="card">
+<h2>ค้นหาใบสมัคร</h2>
+<div class="toolbar">
+<input id="search" placeholder="ค้นหารหัส ชื่อ เบอร์โทร หรือจังหวัด">
+<select id="statusFilter">
+<option value="">ทุกสถานะ</option>
+<option value="pending">รอตรวจสอบ</option>
+<option value="in_progress">กำลังดำเนินการ</option>
+<option value="approved">อนุมัติ</option>
+<option value="rejected">ไม่อนุมัติ</option>
+</select>
+<button id="searchBtn" class="primary">ค้นหา</button>
+</div>
+<div class="tablewrap">
+<table>
+<thead><tr><th>รหัสสมัคร</th><th>วันที่สมัคร</th><th>ชื่อ-นามสกุล</th><th>เบอร์โทร</th><th>จังหวัด</th><th>บริการ</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+<tbody id="applicantRows"></tbody>
+</table>
+</div>
+<div id="loading" class="hidden">กำลังโหลดข้อมูล…</div>
+<footer><span id="pageInfo" class="muted">หน้า 1</span><div class="actions"><button id="prevBtn" class="secondary">ก่อนหน้า</button><button id="nextBtn" class="secondary">ถัดไป</button></div></footer>
+</div>
+
+<div id="detail" class="card hidden">
+<div class="header"><h2>รายละเอียดและจัดการใบสมัคร</h2><button id="closeDetail" class="secondary">ปิด</button></div>
+<div id="detailInfo" class="muted"></div>
+<div id="fullDetail" class="applicant-detail"><div class="detail-loading">เลือกใบสมัครเพื่อดูรายละเอียด</div></div>
+<div id="editArea">
+<label for="editStatus">สถานะใบสมัคร</label>
+<select id="editStatus"><option value="pending">รอตรวจสอบ</option><option value="in_progress">กำลังดำเนินการ</option><option value="approved">อนุมัติ</option><option value="rejected">ไม่อนุมัติ</option></select>
+<label for="editNote">หมายเหตุ</label>
+<textarea id="editNote" placeholder="บันทึกหมายเหตุหรือเหตุผล"></textarea>
+<button id="saveBtn" class="primary" style="margin-top:14px">บันทึกการเปลี่ยนแปลง</button>
+</div>
+</div>
+</section>
+</main>
+
+<script>
+(() => {
+'use strict';
+const SUPABASE_URL='https://xlvnjdusltbyrgskcgir.supabase.co';
+const SUPABASE_KEY='sb_publishable_Wx3yXnPoUAWstgXfSOGx-g_hHe9TRA4';
+const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const $=id=>document.getElementById(id);
+const statuses=['pending','in_progress','approved','rejected'];
+const statusLabels={pending:'รอตรวจสอบ',in_progress:'กำลังดำเนินการ',approved:'อนุมัติ',rejected:'ไม่อนุมัติ'};
+const ADMIN_EMAIL='tanabodin.ch@grabtaxi.com';
+let currentUser=null,currentRole='',rows=[],page=0,selectedApplicant=null;
+const pageSize=25;
+
+function showMessage(id,text,type='error'){const el=$(id);el.textContent=text;el.className='message '+type}
+function clearMessage(id){$(id).textContent='';$(id).className='message hidden'}
+function statusClass(status){
+ if(status==='approved')return 'approved';
+ if(status==='rejected')return 'rejected';
+ if(status==='in_progress')return 'progress';
+ return 'pending';
+}
+function friendlyError(error){
+ const msg=error?.message||String(error||'เกิดข้อผิดพลาด');
+ if(/not_authorized|42501|insufficient_role/i.test(msg))return 'บัญชีนี้ไม่มีสิทธิ์ดูรายละเอียด หรือบัญชีถูกปิดใช้งาน';
+ if(/invalid_status/i.test(msg))return 'สถานะที่เลือกไม่ถูกต้อง';
+ if(/applicant_not_found/i.test(msg))return 'ไม่พบใบสมัครนี้ กรุณาโหลดข้อมูลใหม่';
+ if(/Failed to fetch|NetworkError/i.test(msg))return 'เชื่อมต่อระบบไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต';
+ return msg;
+}
+async function checkAdmin(session){
+ const email=(session?.user?.email||'').trim().toLowerCase();
+ if(email!==ADMIN_EMAIL)throw new Error('not_authorized');
+ currentUser=session.user;currentRole='admin';
+ $('whoami').textContent=email+' · ผู้ดูแลระบบ';
+ $('editArea').classList.remove('hidden');
+}
+function setLoggedIn(value){$('login').classList.toggle('hidden',value);$('app').classList.toggle('hidden',!value)}
+async function login(event){
+ event.preventDefault();clearMessage('loginMsg');$('loginBtn').disabled=true;$('loginBtn').textContent='กำลังเข้าสู่ระบบ…';
+ try{
+  const {data,error}=await db.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});
+  if(error)throw error;
+  await checkAdmin(data.session);setLoggedIn(true);$('password').value='';await loadApplicants();
+ }catch(error){await db.auth.signOut();setLoggedIn(false);showMessage('loginMsg',friendlyError(error))}
+ finally{$('loginBtn').disabled=false;$('loginBtn').textContent='เข้าสู่ระบบ'}
+}
+async function logout(){
+ await db.auth.signOut();currentUser=null;currentRole='';rows=[];selectedApplicant=null;
+ $('applicantRows').replaceChildren();$('detail').classList.add('hidden');setLoggedIn(false);
+}
+async function loadApplicants(){
+ clearMessage('appMsg');$('loading').classList.remove('hidden');$('applicantRows').replaceChildren();$('searchBtn').disabled=true;
+ try{
+  let query=db.from('applicants').select('id, applicant_code, full_name, phone, province, service_type, status, admin_note, submitted_at').order('submitted_at',{ascending:false}).range(page*pageSize,page*pageSize+pageSize-1);
+  const search=$('search').value.trim();
+  if($('statusFilter').value)query=query.eq('status',$('statusFilter').value);
+  if(search)query=query.or('applicant_code.ilike.%'+search+'%,full_name.ilike.%'+search+'%,phone.ilike.%'+search+'%,province.ilike.%'+search+'%');
+  const {data,error}=await query;
+  if(error)throw error;rows=data||[];renderRows();
+ }catch(error){rows=[];renderRows();showMessage('appMsg','โหลดใบสมัครไม่สำเร็จ: '+friendlyError(error))}
+ finally{$('loading').classList.add('hidden');$('searchBtn').disabled=false}
+}
+function renderRows(){
+ const body=$('applicantRows');body.replaceChildren();
+ rows.forEach(row=>{
+  const tr=document.createElement('tr');
+  [row.applicant_code,row.submitted_at?new Date(row.submitted_at).toLocaleString('th-TH'):'—',row.full_name,row.phone,row.province,row.service_type].forEach(value=>{const td=document.createElement('td');td.textContent=value||'—';tr.appendChild(td)});
+  const statusTd=document.createElement('td'),badge=document.createElement('span');
+  badge.className='badge '+statusClass(row.status);badge.textContent=statusLabels[row.status]||row.status||'ไม่ระบุ';statusTd.appendChild(badge);tr.appendChild(statusTd);
+  const actionTd=document.createElement('td'),btn=document.createElement('button');
+  btn.className='secondary';btn.textContent='จัดการ';btn.addEventListener('click',()=>openDetail(row));
+  if(currentRole==='viewer'){btn.disabled=true;btn.title='บัญชีผู้ชมไม่มีสิทธิ์แก้ไข'}
+  actionTd.appendChild(btn);tr.appendChild(actionTd);body.appendChild(tr);
+ });
+ $('countAll').textContent=rows.length;
+ $('countPending').textContent=rows.filter(r=>r.status==='pending').length;
+ $('countProgress').textContent=rows.filter(r=>r.status==='in_progress').length;
+ $('countApproved').textContent=rows.filter(r=>r.status==='approved').length;
+ $('pageInfo').textContent='หน้า '+(page+1)+(rows.length<pageSize?' · สิ้นสุดรายการที่พบ':'');
+ $('prevBtn').disabled=page===0;$('nextBtn').disabled=rows.length<pageSize;
+ if(!rows.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=8;td.textContent='ไม่พบใบสมัคร';td.style.textAlign='center';td.style.padding='28px';tr.appendChild(td);body.appendChild(tr)}
+}
+
+const fieldLabels={
+ source_row_number:'เลขแถวต้นทาง',applicant_code:'รหัสสมัคร',application_code:'รหัสสมัคร',
+ application_date:'วันที่สมัคร',created_at:'วันที่สมัคร',full_name:'ชื่อ-นามสกุล',name:'ชื่อ-นามสกุล',
+ nickname:'ชื่อเล่น',phone:'เบอร์โทรศัพท์',phone_number:'เบอร์โทรศัพท์',email:'อีเมล',
+ birth_date:'วันเกิด',date_of_birth:'วันเกิด',age:'อายุ',province:'จังหวัด',service_type:'ประเภทบริการ',citizen_id:'เลขบัตรประชาชน',admin_note:'หมายเหตุแอดมิน',submitted_at:'วันที่สมัคร',updated_at:'แก้ไขล่าสุด',reviewed_at:'วันที่ตรวจสอบ',
+ national_id:'เลขบัตรประชาชน',id_card_number:'เลขบัตรประชาชน',
+ father_name:'ชื่อบิดา',mother_name:'ชื่อมารดา',national_address:'ที่อยู่ตามทะเบียนบ้าน',
+ address:'ที่อยู่',house_number:'บ้านเลขที่',district:'อำเภอ',subdistrict:'ตำบล',postal_code:'รหัสไปรษณีย์',
+ guardian_name:'ชื่อผู้ติดต่อ',guardian_phone:'เบอร์ผู้ติดต่อ',
+ emergency_contact_name:'ผู้ติดต่อฉุกเฉิน',emergency_contact_phone:'เบอร์ฉุกเฉิน',
+ face_photo_url:'รูปถ่ายผู้สมัคร',face_photo:'รูปถ่ายผู้สมัคร',
+ id_card_url:'รูปบัตรประชาชน',id_card_photo:'รูปบัตรประชาชน',
+ driver_license_url:'ใบขับขี่',driver_license_photo:'ใบขับขี่',
+ vehicle_book_url:'คู่มือรถ',vehicle_book_photo:'คู่มือรถ',
+ status:'สถานะใบสมัคร',note:'หมายเหตุ',source:'แหล่งข้อมูล'
+};
+const sectionKeys={
+ 'ข้อมูลผู้สมัคร':['applicant_code','submitted_at','full_name','phone','email','citizen_id','birth_date','province','service_type','status','admin_note'],
+ 'ข้อมูลครอบครัวและที่อยู่':['father_name','mother_name','national_id','national_address','address','house_number','district','subdistrict','postal_code'],
+ 'ผู้ติดต่อฉุกเฉิน':['emergency_contact_name','emergency_contact_phone'],
+ 'เอกสารประกอบการสมัคร':['face_photo_url','id_card_url','driver_license_url','vehicle_book_url']
+};
+function normalizedDetail(data){
+ if(Array.isArray(data))data=data[0];
+ if(data&&typeof data==='object'&&data.data&&typeof data.data==='object')data=data.data;
+ if(data&&typeof data==='object'&&data.applicant&&typeof data.applicant==='object'){
+  const merged={...data.applicant};
+  if(Array.isArray(data.documents))merged.__documents=data.documents;
+  return merged;
+ }
+ return data&&typeof data==='object'?data:null;
+}
+function renderApplicantDetail(raw){
+ const container=$('fullDetail');container.replaceChildren();
+ const data=normalizedDetail(raw);
+ if(!data){container.textContent='RPC ส่งข้อมูลว่างกลับมา';return}
+ const used=new Set();
+ function addItem(key,value){
+  const item=document.createElement('div');item.className='detail-item';
+  const label=document.createElement('span');label.className='detail-label';label.textContent=fieldLabels[key]||key.replace(/_/g,' ');
+  const content=document.createElement('div');content.className='detail-value';
+  const url=typeof value==='string'&&/^https?:\/\/\S+$/i.test(value);
+  if(url){const link=document.createElement('a');link.href=value;link.target='_blank';link.rel='noopener noreferrer';link.textContent='เปิดดูเอกสาร';content.appendChild(link)}
+  else if(typeof value==='object')content.textContent=JSON.stringify(value);
+  else content.textContent=String(value);
+  item.append(label,content);container.appendChild(item);
+ }
+ function addSection(title,keys){
+  const available=keys.filter(k=>Object.prototype.hasOwnProperty.call(data,k)&&data[k]!==null&&data[k]!==undefined&&data[k]!=='');
+  if(!available.length)return;
+  const heading=document.createElement('div');heading.className='detail-section';heading.textContent=title;container.appendChild(heading);
+  available.forEach(key=>{addItem(key,data[key]);used.add(key)});
+ }
+ Object.entries(sectionKeys).forEach(([title,keys])=>addSection(title,keys));
+ const docs=Array.isArray(data.__documents)?data.__documents:[];
+ if(docs.length){const heading=document.createElement('div');heading.className='detail-section';heading.textContent='เอกสารประกอบการสมัคร';container.appendChild(heading);docs.forEach(doc=>{const item=document.createElement('div');item.className='detail-item';const label=document.createElement('span');label.className='detail-label';label.textContent=({face_photo:'รูปถ่ายผู้สมัคร',id_card:'บัตรประชาชน',driver_license:'ใบขับขี่',vehicle_book:'คู่มือรถ'})[doc.document_type]||doc.document_type||'เอกสาร';const content=document.createElement('div');content.className='detail-value';content.textContent=doc.original_filename||'เอกสาร';if(doc.signed_url){const link=document.createElement('a');link.href=doc.signed_url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='เปิดดูเอกสาร';content.appendChild(document.createTextNode(' · '));content.appendChild(link)}item.append(label,content);container.appendChild(item)});}
+ const extra=Object.keys(data).filter(k=>k!=='__documents'&&!used.has(k)&&data[k]!==null&&data[k]!==undefined&&data[k]!=='');
+ if(extra.length){const heading=document.createElement('div');heading.className='detail-section';heading.textContent='ข้อมูลเพิ่มเติม';container.appendChild(heading);extra.forEach(key=>addItem(key,data[key]))}
+ if(!container.children.length)container.textContent='RPC ส่งข้อมูลมาแต่ไม่มีฟิลด์ที่แสดงได้';
+}
+async function openDetail(row){
+ selectedApplicant=row;
+ $('detailInfo').textContent=`${row.applicant_code||'ไม่มีรหัส'} · ${row.full_name||'ไม่ระบุชื่อ'} · ${row.phone||'ไม่มีเบอร์โทร'}`;
+ $('editStatus').value=statuses.includes(row.status)?row.status:'pending';
+ $('editNote').value=row.admin_note||'';
+ $('detail').classList.remove('hidden');
+ $('fullDetail').replaceChildren();
+ const loading=document.createElement('div');loading.className='detail-loading';loading.textContent='กำลังโหลดรายละเอียดผู้สมัคร…';$('fullDetail').appendChild(loading);
+ $('detail').scrollIntoView({behavior:'smooth',block:'start'});
+ try{
+  const result=await db.rpc('admin_get_new_applicant_detail',{p_applicant_id:row.id});
+  console.log('[Applicant detail] RPC result:',result);
+  if(result.error)throw result.error;
+  if(!selectedApplicant||selectedApplicant.id!==row.id)return;
+  if(!result.data)throw new Error('RPC ไม่ส่งข้อมูลรายละเอียดกลับมา');
+  const detailData=result.data;
+  if(Array.isArray(detailData.documents)){
+   for(const doc of detailData.documents){const {data:signed,error:signedError}=await db.storage.from('applicant-documents').createSignedUrl(doc.storage_path,300);if(!signedError&&signed?.signedUrl)doc.signed_url=signed.signedUrl;}
+  }
+  renderApplicantDetail(detailData);
+ }catch(error){
+  console.error('[Applicant detail] Error:',error);
+  $('fullDetail').replaceChildren();
+  const msg=document.createElement('div');msg.className='detail-loading';msg.textContent='โหลดรายละเอียดไม่สำเร็จ: '+(error?.message||String(error));$('fullDetail').appendChild(msg);
+ }
+}
+async function saveApplicant(){
+ if(!selectedApplicant)return;
+ if(currentRole==='viewer'){showMessage('appMsg','บัญชีผู้ชมไม่มีสิทธิ์แก้ไข');return}
+ const newStatus=$('editStatus').value;
+ if(!statuses.includes(newStatus)){showMessage('appMsg','กรุณาเลือกสถานะที่ถูกต้อง');return}
+ if(newStatus==='rejected'&&!$('editNote').value.trim()){showMessage('appMsg','กรุณาระบุเหตุผลก่อนปฏิเสธใบสมัคร');return}
+ if(!confirm(`ยืนยันเปลี่ยนสถานะเป็น "${newStatus}" หรือไม่?`))return;
+ $('saveBtn').disabled=true;$('saveBtn').textContent='กำลังบันทึก…';clearMessage('appMsg');
+ try{
+  const {data,error}=await db.from('applicants').update({status:newStatus,admin_note:$('editNote').value.trim()||null,updated_at:new Date().toISOString(),reviewed_at:new Date().toISOString(),reviewed_by:currentUser.id}).eq('id',selectedApplicant.id).select('id').maybeSingle();
+  if(error)throw error;
+  if(!data)throw new Error('ไม่สามารถบันทึกได้ บัญชีอาจไม่มีสิทธิ์หรือไม่พบรายการ');
+  $('detail').classList.add('hidden');selectedApplicant=null;showMessage('appMsg','บันทึกการเปลี่ยนแปลงเรียบร้อยแล้ว','success');await loadApplicants();
+ }catch(error){showMessage('appMsg','บันทึกไม่สำเร็จ: '+friendlyError(error))}
+ finally{$('saveBtn').disabled=false;$('saveBtn').textContent='บันทึกการเปลี่ยนแปลง'}
+}
+$('loginForm').addEventListener('submit',login);
+$('logoutBtn').addEventListener('click',logout);
+$('searchBtn').addEventListener('click',()=>{page=0;loadApplicants()});
+$('statusFilter').addEventListener('change',()=>{page=0;loadApplicants()});
+$('search').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();page=0;loadApplicants()}});
+$('prevBtn').addEventListener('click',()=>{if(page>0){page--;loadApplicants()}});
+$('nextBtn').addEventListener('click',()=>{if(rows.length===pageSize){page++;loadApplicants()}});
+$('saveBtn').addEventListener('click',saveApplicant);
+$('closeDetail').addEventListener('click',()=>{selectedApplicant=null;$('detail').classList.add('hidden')});
+db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'){currentUser=null;currentRole='';selectedApplicant=null;setLoggedIn(false)}});
+(async function restoreSession(){
+ const {data,error}=await db.auth.getSession();
+ if(error||!data.session)return;
+ try{await checkAdmin(data.session);setLoggedIn(true);await loadApplicants()}
+ catch(error){await db.auth.signOut();setLoggedIn(false);showMessage('loginMsg',friendlyError(error))}
+})();
+})();
+</script>
+</body>
+</html>
